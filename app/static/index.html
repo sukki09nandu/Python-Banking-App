@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banking Console</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --ink: #1b2430; --muted: #5f6b7a; --line: #dfe4ea;
+    --accent: #1f5fbf; --accent-ink: #ffffff; --ok: #1d7a46; --ok-bg: #e5f4ec;
+    --bad: #b42318; --bad-bg: #fdecea; --sel: #eaf1fc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161c; --panel: #1a2029; --ink: #e6eaf0; --muted: #96a1b0; --line: #2c3542;
+      --accent: #5b95ea; --accent-ink: #0d1117; --ok: #5fcf8e; --ok-bg: #16301f;
+      --bad: #f2867c; --bad-bg: #3a1c1a; --sel: #1f2c3f;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+           background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; }
+  header .spacer { flex: 1; }
+  header a { color: var(--accent); text-decoration: none; }
+  .pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+          background: var(--line); color: var(--muted); }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .note { font-size: 12px; color: var(--muted); }
+  main { display: grid; gap: 16px; padding: 16px 20px; max-width: 1280px; margin: 0 auto;
+         grid-template-columns: 300px 1fr; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 16px; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  section h2 { font-size: 15px; margin: 0 0 12px; }
+  .stack { display: grid; gap: 16px; align-content: start; min-width: 0; }
+  ul.list { list-style: none; margin: 0 0 12px; padding: 0; max-height: 340px; overflow: auto; }
+  ul.list li { padding: 8px 10px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+  ul.list li:hover { border-color: var(--line); }
+  ul.list li.selected { background: var(--sel); border-color: var(--accent); }
+  ul.list li small { display: block; color: var(--muted); }
+  form { display: grid; gap: 8px; }
+  form .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  form .row > * { flex: 1 1 120px; }
+  label { font-size: 12px; color: var(--muted); display: grid; gap: 3px; }
+  input, select, button { font: inherit; padding: 7px 9px; border-radius: 6px;
+                          border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  button { background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
+           cursor: pointer; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .accounts { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+              margin-bottom: 12px; }
+  .acct { border: 1px solid var(--line); border-radius: 8px; padding: 12px; cursor: pointer; }
+  .acct.selected { border-color: var(--accent); background: var(--sel); }
+  .acct .bal { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 4px 0; }
+  .acct .meta { font-size: 12px; color: var(--muted); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .tabs button { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 500; }
+  .tabs button.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .empty { color: var(--muted); padding: 8px 0; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  td.num, th.num { text-align: right; }
+  .credit { color: var(--ok); } .debit { color: var(--bad); }
+  #toasts { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 8px; z-index: 10;
+            max-width: min(380px, calc(100vw - 32px)); }
+  .toast { padding: 10px 14px; border-radius: 8px; border: 1px solid; font-size: 13px; }
+  .toast.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+  .toast.bad { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Banking Console</h1>
+  <span id="health" class="pill" data-testid="health">checking…</span>
+  <span class="note">Synthetic test data only</span>
+  <span class="spacer"></span>
+  <a href="/docs" target="_blank" rel="noopener">API docs ↗</a>
+</header>
+
+<main>
+  <div class="stack">
+    <section>
+      <h2>Customers</h2>
+      <ul id="customers" class="list" data-testid="customer-list"></ul>
+      <form id="new-customer" data-testid="new-customer-form">
+        <label>Full name <input name="full_name" required maxlength="100" placeholder="Test Customer"></label>
+        <label>Email <input name="email" type="email" required placeholder="test@example.com"></label>
+        <button type="submit">Add customer</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section>
+      <h2 id="accounts-title">Accounts</h2>
+      <div id="accounts" class="accounts" data-testid="accounts"></div>
+      <form id="new-account" class="row" data-testid="new-account-form">
+        <div class="row">
+          <label>Type
+            <select name="account_type"><option value="checking">Checking</option><option value="savings">Savings</option></select>
+          </label>
+          <label>Currency
+            <select name="currency"><option>USD</option><option>EUR</option><option>GBP</option></select>
+          </label>
+          <label>&nbsp;<button type="submit" id="open-account" disabled>Open account</button></label>
+        </div>
+      </form>
+    </section>
+
+    <section>
+      <h2>Move money <span id="move-from" class="note"></span></h2>
+      <div class="tabs" role="tablist">
+        <button type="button" data-tab="deposit" class="active">Deposit</button>
+        <button type="button" data-tab="withdrawal">Withdraw</button>
+        <button type="button" data-tab="transfer">Transfer</button>
+      </div>
+      <form id="move" data-testid="move-form">
+        <div class="row">
+          <label>Amount <input name="amount" required inputmode="decimal" placeholder="0.00" pattern="^\d+(\.\d{1,2})?$"></label>
+          <label id="to-wrap" hidden>To account <select name="to_account_id"></select></label>
+          <label>Description <input name="description" maxlength="140" placeholder="optional"></label>
+        </div>
+        <button type="submit" id="move-submit" disabled>Deposit</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Transactions <span id="tx-for" class="note"></span></h2>
+      <div class="table-wrap">
+        <table data-testid="transactions">
+          <thead><tr><th>Time</th><th>Type</th><th class="num">Amount</th><th class="num">Balance after</th><th>Description</th></tr></thead>
+          <tbody id="tx-body"></tbody>
+        </table>
+      </div>
+      <div id="tx-empty" class="empty">Select an account to see its history.</div>
+    </section>
+  </div>
+</main>
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const state = { customers: [], accounts: [], allAccounts: [], customerId: null, accountId: null, tab: "deposit" };
+
+function el(tag, props = {}, ...children) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") n.className = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else if (k === "dataset") Object.assign(n.dataset, v);
+    else n.setAttribute(k, v);
+  }
+  for (const c of children) n.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  return n;
+}
+
+function toast(msg, ok = true) {
+  const t = el("div", { class: "toast " + (ok ? "ok" : "bad"), role: "status" }, msg);
+  $("#toasts").append(t);
+  setTimeout(() => t.remove(), 5000);
+}
+
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method, headers: body ? { "content-type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    let detail = data.detail ?? res.statusText;
+    if (Array.isArray(detail)) detail = detail.map((d) => `${d.loc.at(-1)}: ${d.msg}`).join("; ");
+    throw new Error(`${res.status} – ${detail}`);
+  }
+  return data;
+}
+
+const money = (amount, cur) => {
+  try { return new Intl.NumberFormat(undefined, { style: "currency", currency: cur }).format(Number(amount)); }
+  catch { return `${amount} ${cur}`; }
+};
+const idemKey = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2));
+
+async function checkHealth() {
+  const pill = $("#health");
+  try {
+    const h = await api("GET", "/health");
+    pill.textContent = `healthy · v${h.version} · db ${h.database}`; pill.className = "pill ok";
+  } catch (e) {
+    pill.textContent = "unhealthy · " + e.message; pill.className = "pill bad";
+  }
+}
+
+async function loadCustomers() {
+  state.customers = await api("GET", "/customers?limit=200");
+  const ul = $("#customers"); ul.replaceChildren();
+  if (!state.customers.length) ul.append(el("li", { class: "empty" }, "No customers yet."));
+  for (const c of state.customers) {
+    ul.append(el("li", {
+      class: c.id === state.customerId ? "selected" : "", dataset: { id: c.id },
+      onclick: () => selectCustomer(c.id),
+    }, c.full_name, el("small", {}, c.email)));
+  }
+}
+
+async function loadAllAccounts() {
+  state.allAccounts = await api("GET", "/accounts?limit=200");
+}
+
+async function selectCustomer(id) {
+  state.customerId = id;
+  const first = state.allAccounts.find((a) => a.customer_id === id);
+  state.accountId = first ? first.id : null;
+  await refresh();
+}
+
+function renderAccounts() {
+  const cust = state.customers.find((c) => c.id === state.customerId);
+  $("#accounts-title").textContent = cust ? `Accounts – ${cust.full_name}` : "Accounts";
+  $("#open-account").disabled = !cust;
+  const box = $("#accounts"); box.replaceChildren();
+  if (!cust) { box.append(el("div", { class: "empty" }, "Select a customer.")); return; }
+  if (!state.accounts.length) box.append(el("div", { class: "empty" }, "No accounts. Open one below."));
+  for (const a of state.accounts) {
+    box.append(el("div", {
+      class: "acct" + (a.id === state.accountId ? " selected" : ""), dataset: { id: a.id }, tabindex: "0",
+      onclick: () => selectAccount(a.id),
+      onkeydown: (e) => { if (e.key === "Enter") selectAccount(a.id); },
+    },
+      el("div", { class: "meta" }, `${a.account_type} · #${a.account_number}`),
+      el("div", { class: "bal", "data-testid": "balance" }, money(a.balance, a.currency)),
+      el("div", { class: "meta" }, `id ${a.id} · ${a.status}`)));
+  }
+}
+
+function renderMoveForm() {
+  const acct = state.accounts.find((a) => a.id === state.accountId);
+  $("#move-from").textContent = acct ? `from/to #${acct.account_number}` : "– select an account";
+  $("#move-submit").disabled = !acct;
+  $("#move-submit").textContent = { deposit: "Deposit", withdrawal: "Withdraw", transfer: "Transfer" }[state.tab];
+  document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === state.tab));
+  $("#to-wrap").hidden = state.tab !== "transfer";
+  const sel = $("#move select[name=to_account_id]"); sel.replaceChildren();
+  for (const a of state.allAccounts) {
+    if (acct && a.id === acct.id) continue;
+    const owner = state.customers.find((c) => c.id === a.customer_id);
+    sel.append(el("option", { value: a.id }, `#${a.account_number} – ${owner ? owner.full_name : "?"} (${a.currency})`));
+  }
+}
+
+async function selectAccount(id) {
+  state.accountId = id;
+  renderAccounts(); renderMoveForm();
+  await loadTransactions();
+}
+
+async function loadTransactions() {
+  const body = $("#tx-body"); body.replaceChildren();
+  const acct = state.accounts.find((a) => a.id === state.accountId);
+  $("#tx-for").textContent = acct ? `– #${acct.account_number}` : "";
+  if (!acct) { $("#tx-empty").hidden = false; $("#tx-empty").textContent = "Select an account to see its history."; return; }
+  const txs = await api("GET", `/accounts/${acct.id}/transactions?limit=100`);
+  $("#tx-empty").hidden = txs.length > 0;
+  $("#tx-empty").textContent = "No transactions yet.";
+  for (const t of txs) {
+    const credit = t.type === "deposit" || t.type === "transfer_in";
+    body.append(el("tr", {},
+      el("td", {}, new Date(t.created_at).toLocaleString()),
+      el("td", {}, t.type.replace("_", " ")),
+      el("td", { class: "num " + (credit ? "credit" : "debit") }, (credit ? "+" : "−") + money(t.amount, acct.currency)),
+      el("td", { class: "num" }, money(t.balance_after, acct.currency)),
+      el("td", {}, t.description ?? "")));
+  }
+}
+
+async function refresh() {
+  await Promise.all([loadCustomers(), loadAllAccounts()]);
+  state.accounts = state.allAccounts.filter((a) => a.customer_id === state.customerId);
+  renderAccounts(); renderMoveForm();
+  await loadTransactions();
+}
+
+$("#new-customer").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  try {
+    const c = await api("POST", "/customers", { full_name: f.get("full_name"), email: f.get("email") });
+    e.target.reset(); toast(`Customer “${c.full_name}” created`);
+    await selectCustomer(c.id);
+  } catch (err) { toast(err.message, false); }
+});
+
+$("#new-account").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  try {
+    const a = await api("POST", "/accounts", {
+      customer_id: state.customerId, account_type: f.get("account_type"), currency: f.get("currency"),
+    });
+    toast(`Account #${a.account_number} opened`);
+    state.accountId = a.id; await refresh();
+  } catch (err) { toast(err.message, false); }
+});
+
+document.querySelectorAll(".tabs button").forEach((b) =>
+  b.addEventListener("click", () => { state.tab = b.dataset.tab; renderMoveForm(); }));
+
+$("#move").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const btn = $("#move-submit"); btn.disabled = true;
+  const common = { amount: f.get("amount"), description: f.get("description") || null, idempotency_key: idemKey() };
+  try {
+    if (state.tab === "transfer") {
+      const to = Number(f.get("to_account_id"));
+      if (!to) throw new Error("No destination account available");
+      await api("POST", "/transactions/transfer", { from_account_id: state.accountId, to_account_id: to, ...common });
+      toast(`Transferred ${common.amount}`);
+    } else {
+      await api("POST", `/transactions/${state.tab}`, { account_id: state.accountId, ...common });
+      toast(`${state.tab === "deposit" ? "Deposited" : "Withdrew"} ${common.amount}`);
+    }
+    e.target.reset(); await refresh();
+  } catch (err) { toast(err.message, false); }
+  finally { btn.disabled = !state.accountId; }
+});
+
+(async () => {
+  checkHealth(); setInterval(checkHealth, 15000);
+  try {
+    await refresh();
+    if (state.customers.length) await selectCustomer(state.customers[0].id);
+  } catch (err) { toast("Could not load data: " + err.message, false); }
+})();
+</script>
+</body>
+</html>
